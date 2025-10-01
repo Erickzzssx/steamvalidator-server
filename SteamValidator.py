@@ -70,10 +70,6 @@ def append_valid_token_block(steam_id: str, nickname: str, prime_status: str, to
     # Writes the requested block-only format for valid tokens
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Check for bans
-    is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
-    ban_info = f"Ban Status: {ban_type} ({ban_duration})" if is_banned else "Ban Status: Limpo"
-    
     lines = [
         "🎮 Token Steam Válido Encontrado!",
         "Steam ID",
@@ -82,7 +78,6 @@ def append_valid_token_block(steam_id: str, nickname: str, prime_status: str, to
         nickname or "Desconhecido",
         "Prime Status",
         prime_status or "Desconhecido",
-        ban_info,
         "Token Completo (Copie e Cole)",
         token,
         f"Validado em: {ts}",
@@ -112,7 +107,7 @@ def decode_jwt_sub(steam_token: str) -> Optional[str]:
 
 
 def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
-    """Bridge to existing Steam API logic below: returns (nickname, prime_status)."""
+    """Bridge to existing Steam API logic below: returns (nickname, prime_status_with_bans)."""
     try:
         # Use the existing helper functions defined later in the file
         # Read API key from the bottom config if present; fallback to None
@@ -121,10 +116,24 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
         nickname = info.get('nickname', 'Desconhecido')
         prime_info = check_prime_status(steam_id, steam_api_key)
         prime_status = prime_info.get('prime_status', 'Desconhecido')
+        
         # Attach hours if available
         if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
             prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
-        return nickname, prime_status
+        
+        # Add ban information
+        is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
+        if is_banned:
+            ban_emoji = "🔴"  # Red for banned
+            ban_info = f"{ban_emoji} Ban: {ban_type} ({ban_duration})"
+        else:
+            ban_emoji = "🟢"  # Green for clean
+            ban_info = f"{ban_emoji} Limpo"
+        
+        # Combine prime status with ban info
+        full_status = f"{prime_status}\n{ban_info}"
+        
+        return nickname, full_status
     except Exception:
         return "Desconhecido", "Desconhecido"
 
@@ -139,7 +148,13 @@ def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
         # Steam API endpoint for ban checking
         url = f"https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key={steam_api_key}&steamids={steam_id}"
         r = requests.get(url, timeout=10)
-        data = r.json()
+        
+        # Check if response is valid JSON
+        if r.headers.get('content-type', '').startswith('application/json'):
+            data = r.json()
+        else:
+            # If not JSON, return error
+            return False, "Erro", "API retornou HTML"
         
         if "players" in data and data["players"]:
             player = data["players"][0]
@@ -183,7 +198,7 @@ def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
                 return False, "Limpo", "Sem bans"
                 
     except Exception as e:
-        print(f"Erro ao verificar bans: {e}")
+        # Don't print error to avoid spam
         return False, "Erro", "Não foi possível verificar"
     
     return False, "Limpo", "Sem bans"
