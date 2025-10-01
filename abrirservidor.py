@@ -257,6 +257,12 @@ def get_key_record(key_value: str) -> Optional[sqlite3.Row]:
     return cur.fetchone()
 
 
+def get_key_record_by_user_id(user_id: int) -> Optional[sqlite3.Row]:
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM keys WHERE user_id = ?", (user_id,))
+    return cur.fetchone()
+
+
 def is_hwid_banned(hwid: str) -> Tuple[bool, Optional[str]]:
     if not hwid:
         return False, None
@@ -486,29 +492,50 @@ def admin_generate_key():
     if not key_value or not isinstance(key_value, str) or len(key_value) < 8:
         key_value = os.urandom(24).hex()
 
-    expires_at: Optional[str] = None
+    # Calculate new expiration time (accumulate with existing key)
+    new_expires_at: Optional[str] = None
     if duration_days is not None:
         try:
             days = int(duration_days)
             if days > 0:
-                exp = datetime.now(timezone.utc) + timedelta(days=days)
-                expires_at = exp.strftime("%Y-%m-%dT%H:%M:%SZ")
+                # Check if user already has a key
+                existing_key = get_key_record_by_user_id(int(user["id"]))
+                if existing_key and existing_key["expires_at"]:
+                    # Add to existing expiration time
+                    try:
+                        existing_exp = datetime.strptime(existing_key["expires_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                        new_exp = existing_exp + timedelta(days=days)
+                        new_expires_at = new_exp.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    except Exception:
+                        # If existing expiration is invalid, use current time + days
+                        new_exp = datetime.now(timezone.utc) + timedelta(days=days)
+                        new_expires_at = new_exp.strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    # No existing key or lifetime key, use current time + days
+                    new_exp = datetime.now(timezone.utc) + timedelta(days=days)
+                    new_expires_at = new_exp.strftime("%Y-%m-%dT%H:%M:%SZ")
             else:
-                expires_at = None  # lifetime
+                new_expires_at = None  # lifetime
         except Exception:
-            expires_at = None
+            new_expires_at = None
 
+    # Delete existing key if user already has one
+    cur = conn.cursor()
+    cur.execute("DELETE FROM keys WHERE user_id = ?", (int(user["id"]),))
+    
+    # Insert new/updated key
     try:
-        insert_key(int(user["id"]), key_value, expires_at)
+        insert_key(int(user["id"]), key_value, new_expires_at)
     except sqlite3.IntegrityError:
         # Retry with a different random key if conflict
         key_value = os.urandom(24).hex()
-        insert_key(int(user["id"]), key_value, expires_at)
+        insert_key(int(user["id"]), key_value, new_expires_at)
 
     result = {
         "username": user["username"],
         "key": key_value,
-        "expires_at": expires_at,
+        "expires_at": new_expires_at,
+        "accumulated": True
     }
     insert_log(conn, endpoint, ip, 200, json.dumps(result))
     return jsonify(result), 200
