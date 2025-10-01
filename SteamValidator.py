@@ -125,85 +125,17 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
         if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
             prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
         
-        # Add ban information
-        is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
-        if is_banned:
-            ban_emoji = "🔴"  # Red for banned
-            ban_info = f"{ban_emoji} Ban: {ban_type} ({ban_duration})"
-        else:
-            ban_emoji = "🟢"  # Green for clean
-            ban_info = f"{ban_emoji} Limpo"
-        
-        # Combine prime status with ban info
-        full_status = f"{prime_status}\n{ban_info}"
-        
-        return nickname, full_status
+        return nickname, prime_status
     except Exception:
         return "Desconhecido", "Desconhecido"
 
 
 def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
     """
-    Check Steam bans using official API
-    Returns: (is_banned, ban_type, ban_duration)
+    Ban check disabled per performance request.
+    Always returns clean to avoid extra API calls.
     """
-    try:
-        steam_api_key = "CEEE7815145AD238A5590EFF82294630"
-        # Steam API endpoint for ban checking
-        url = f"https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key={steam_api_key}&steamids={steam_id}"
-        r = requests.get(url, timeout=10)
-        
-        # Check if response is valid JSON
-        if r.headers.get('content-type', '').startswith('application/json'):
-            data = r.json()
-        else:
-            # If not JSON, return error
-            return False, "Erro", "API retornou HTML"
-        
-        if "players" in data and data["players"]:
-            player = data["players"][0]
-            
-            # Check VAC ban
-            vac_banned = player.get("VACBanned", False)
-            vac_days = player.get("DaysSinceLastBan", 0)
-            
-            # Check game ban
-            game_banned = player.get("NumberOfGameBans", 0) > 0
-            game_days = player.get("DaysSinceLastBan", 0)
-            
-            # Check community ban
-            community_banned = player.get("CommunityBanned", False)
-            
-            # Determine ban status
-            if vac_banned or game_banned or community_banned:
-                ban_type = []
-                ban_duration = []
-                
-                if vac_banned:
-                    ban_type.append("VAC")
-                    if vac_days == 0:
-                        ban_duration.append("Permanente")
-                    else:
-                        ban_duration.append(f"{vac_days} dias atrás")
-                
-                if game_banned:
-                    ban_type.append("Game Ban")
-                    if game_days == 0:
-                        ban_duration.append("Permanente")
-                    else:
-                        ban_duration.append(f"{game_days} dias atrás")
-                
-                if community_banned:
-                    ban_type.append("Community Ban")
-                    ban_duration.append("Permanente")
-                
-                return True, " | ".join(ban_type), " | ".join(ban_duration)
-            else:
-                return False, "Limpo", "Sem bans"
-                
-    except Exception as e:
-        # Don't print error to avoid spam
-        return False, "Limpo", "Sem bans"
+    return False, "Limpo", "Sem bans"
 
 
 # =============== HWID Calculation ===============
@@ -959,7 +891,7 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                         'token': token[:50] + "..." if len(token) > 50 else token,
                         'status': 'Error',
                         'details': f'Falha ao decodificar token JWT: {str(e)}',
-                        'timestamp': datetime.datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat()
                     }
                     results.append(result)
                     print(f"  ✗ Erro ao decodificar token")
@@ -967,14 +899,14 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                 
                 # Verifica se o token está expirado
                 if is_token_expired(decoded_token):
-                    exp_time = datetime.datetime.fromtimestamp(decoded_token['exp'])
+                    exp_time = datetime.fromtimestamp(decoded_token['exp'])
                     result = {
                         'account_id': account_id,
                         'token': token[:50] + "..." if len(token) > 50 else token,
                         'status': 'Expired',
                         'details': f"Token expirou em {exp_time.strftime('%Y-%m-%d %H:%M:%S')}",
                         'expiration_date': exp_time.isoformat(),
-                        'timestamp': datetime.datetime.now().isoformat()
+                        'timestamp': datetime.now().isoformat()
                     }
                     results.append(result)
                     print(f"  ⏰ Expirado em {exp_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -989,7 +921,7 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                     'status': 'Valid',
                     'token_valid': True,
                     'steam_id': steam_id,
-                    'timestamp': datetime.datetime.now().isoformat()
+                    'timestamp': datetime.now().isoformat()
                 }
                 
                 # Obtém informações do jogador
@@ -1024,7 +956,7 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                     'token': line[:50] + "..." if len(line) > 50 else line,
                     'status': 'Error',
                     'details': f"Erro ao processar linha: {str(e)}",
-                    'timestamp': datetime.datetime.now().isoformat()
+                    'timestamp': datetime.now().isoformat()
                 }
                 results.append(result)
                 print(f"  ✗ Erro: {str(e)}")
@@ -1098,7 +1030,7 @@ def send_final_summary_to_discord(results, valid_count, expired_count, error_cou
                 }
             ],
             "footer": {
-                "text": f"Processamento concluído em: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                "text": f"Processamento concluído em: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             }
         }
         
