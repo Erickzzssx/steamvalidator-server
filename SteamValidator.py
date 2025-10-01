@@ -1160,3 +1160,4 @@ if __name__ == "__main__":
     print("Iniciando checagem de tokens...")
     process_tokens(input_file, output_file, steam_api_key)
     print("Checagem concluída!")
+
