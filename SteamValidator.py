@@ -69,6 +69,11 @@ def print_and_save(text: str) -> None:
 def append_valid_token_block(steam_id: str, nickname: str, prime_status: str, token: str) -> None:
     # Writes the requested block-only format for valid tokens
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Check for bans
+    is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
+    ban_info = f"Ban Status: {ban_type} ({ban_duration})" if is_banned else "Ban Status: Limpo"
+    
     lines = [
         "🎮 Token Steam Válido Encontrado!",
         "Steam ID",
@@ -77,6 +82,7 @@ def append_valid_token_block(steam_id: str, nickname: str, prime_status: str, to
         nickname or "Desconhecido",
         "Prime Status",
         prime_status or "Desconhecido",
+        ban_info,
         "Token Completo (Copie e Cole)",
         token,
         f"Validado em: {ts}",
@@ -121,6 +127,66 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
         return nickname, prime_status
     except Exception:
         return "Desconhecido", "Desconhecido"
+
+
+def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
+    """
+    Check Steam bans using official API
+    Returns: (is_banned, ban_type, ban_duration)
+    """
+    try:
+        steam_api_key = "CEEE7815145AD238A5590EFF82294630"
+        # Steam API endpoint for ban checking
+        url = f"https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key={steam_api_key}&steamids={steam_id}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        
+        if "players" in data and data["players"]:
+            player = data["players"][0]
+            
+            # Check VAC ban
+            vac_banned = player.get("VACBanned", False)
+            vac_days = player.get("DaysSinceLastBan", 0)
+            
+            # Check game ban
+            game_banned = player.get("NumberOfGameBans", 0) > 0
+            game_days = player.get("DaysSinceLastBan", 0)
+            
+            # Check community ban
+            community_banned = player.get("CommunityBanned", False)
+            
+            # Determine ban status
+            if vac_banned or game_banned or community_banned:
+                ban_type = []
+                ban_duration = []
+                
+                if vac_banned:
+                    ban_type.append("VAC")
+                    if vac_days == 0:
+                        ban_duration.append("Permanente")
+                    else:
+                        ban_duration.append(f"{vac_days} dias atrás")
+                
+                if game_banned:
+                    ban_type.append("Game Ban")
+                    if game_days == 0:
+                        ban_duration.append("Permanente")
+                    else:
+                        ban_duration.append(f"{game_days} dias atrás")
+                
+                if community_banned:
+                    ban_type.append("Community Ban")
+                    ban_duration.append("Permanente")
+                
+                return True, " | ".join(ban_type), " | ".join(ban_duration)
+            else:
+                return False, "Limpo", "Sem bans"
+                
+    except Exception as e:
+        print(f"Erro ao verificar bans: {e}")
+        return False, "Erro", "Não foi possível verificar"
+    
+    return False, "Limpo", "Sem bans"
 
 
 # =============== HWID Calculation ===============
@@ -219,19 +285,18 @@ def load_session_username() -> str:
 
 def read_or_create_client_config() -> tuple[str, int]:
     try:
-        os.makedirs(BASE_DIR, exist_ok=True)
         if not os.path.isfile(CLIENT_CONFIG_PATH):
-            # Default to your public server
+            # Default to Railway server
             with open(CLIENT_CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump({"server_ip": "193.186.4.236", "server_port": SERVER_PORT_DEFAULT}, f, indent=2)
-            return "193.186.4.236", SERVER_PORT_DEFAULT
+                json.dump({"server_ip": SERVER_IP_DEFAULT, "server_port": SERVER_PORT_DEFAULT}, f, indent=2)
+            return SERVER_IP_DEFAULT, SERVER_PORT_DEFAULT
         with open(CLIENT_CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-        ip = str(cfg.get("server_ip", "193.186.4.236"))
+        ip = str(cfg.get("server_ip", SERVER_IP_DEFAULT))
         port = int(cfg.get("server_port", SERVER_PORT_DEFAULT))
         return ip, port
     except Exception:
-        return "193.186.4.236", SERVER_PORT_DEFAULT
+        return SERVER_IP_DEFAULT, SERVER_PORT_DEFAULT
 
 
 # =============== Simple Login GUI ===============
@@ -489,6 +554,8 @@ def validate_tokens_once(server_ip: str, port: int, tokens_path: str) -> None:
             nickname, prime_status = get_steam_user_info(steam_id)
             # Print token inline with the validation result
             print_and_save(f"      Token: {token}")
+            # Save detailed token block with ban info
+            append_valid_token_block(steam_id, nickname, prime_status, token)
     save_session(server_ip, port, username)
 
 
@@ -541,6 +608,8 @@ def monitor_tokens(server_ip: str, port: int, tokens_path: str, interval_sec: in
                 nickname, prime_status = get_steam_user_info(steam_id)
                 # Print token inline with the validation result
                 print_and_save(f"      Token: {token}")
+                # Save detailed token block with ban info
+                append_valid_token_block(steam_id, nickname, prime_status, token)
             save_session(server_ip, port, username)
         time.sleep(interval_sec)
 
