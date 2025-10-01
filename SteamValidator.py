@@ -15,13 +15,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 
-BASE_DIR = r"C:\SteamValidator"
+BASE_DIR = os.path.join(os.path.expanduser("~"), "SteamValidator")
 RESULT_PATH = os.path.join(BASE_DIR, "ValidatorResult.txt")
 SESSION_PATH = os.path.join(BASE_DIR, "session.bin")
 CLIENT_KEY_PATH = os.path.join(BASE_DIR, "client_api_key.txt")
 CLIENT_CONFIG_PATH = os.path.join(BASE_DIR, "client_config.json")
-SERVER_IP_DEFAULT = "127.0.0.1"  # Localhost para teste
-SERVER_PORT_DEFAULT = 5000
+SERVER_IP_DEFAULT = "web-production-f5f3.up.railway.app"  # URL pública do Railway
+SERVER_PORT_DEFAULT = 80
 
 
 def ensure_base_dir() -> None:
@@ -382,7 +382,10 @@ def read_client_api_key() -> Tuple[bool, str]:
 
 
 def bootstrap_client_api_key(server_ip: str, port: int) -> Tuple[bool, str]:
-    url = f"http://{server_ip}:{port}/api/public/server_api_key"
+    if server_ip.startswith("http"):
+        url = f"{server_ip}/api/public/server_api_key"
+    else:
+        url = f"https://{server_ip}/api/public/server_api_key"
     try:
         r = requests.get(url, timeout=10)
         data = r.json() if r.headers.get("content-type", "").lower().startswith("application/json") else {}
@@ -398,7 +401,10 @@ def bootstrap_client_api_key(server_ip: str, port: int) -> Tuple[bool, str]:
 
 
 def post_validate(server_ip: str, port: int, api_key: str, license_key: str, hwid: str, username: str, steam_token: str) -> Tuple[bool, int, dict, str]:
-    url = f"http://{server_ip}:{port}/api/validate"
+    if server_ip.startswith("http"):
+        url = f"{server_ip}/api/validate"
+    else:
+        url = f"https://{server_ip}/api/validate"
     try:
         r = requests.post(
             url,
@@ -416,7 +422,10 @@ def post_validate(server_ip: str, port: int, api_key: str, license_key: str, hwi
 
 
 def post_auth(server_ip: str, port: int, api_key: str, endpoint: str, username: str, license_key: str, hwid: str) -> Tuple[bool, int, dict, str]:
-    url = f"http://{server_ip}:{port}{endpoint}"
+    if server_ip.startswith("http"):
+        url = f"{server_ip}{endpoint}"
+    else:
+        url = f"https://{server_ip}{endpoint}"
     try:
         r = requests.post(url, json={"username": username, "license_key": license_key, "hwid": hwid}, headers={"X-Api-Key": api_key}, timeout=15)
         try:
