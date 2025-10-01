@@ -363,6 +363,16 @@ def public_server_api_key():
     result = {"server_api_key": tokens.get("server_api_key"), "rate_limit_per_min": tokens.get("rate_limit_per_min", 60)}
     insert_log(conn, endpoint, ip, 200, json.dumps({"provided": True}))
     return jsonify(result), 200
+
+
+@app.route("/api/public/admin_token", methods=["GET"])
+def public_admin_token():
+    # No auth: used by admin panel to get admin token
+    endpoint = "/api/public/admin_token"
+    ip = get_client_ip()
+    result = {"admin_token": tokens.get("admin_token")}
+    insert_log(conn, endpoint, ip, 200, json.dumps({"provided": True}))
+    return jsonify(result), 200
 @app.route("/api/register", methods=["POST"])
 def api_register():
     auth_err = require_server_api_key()
