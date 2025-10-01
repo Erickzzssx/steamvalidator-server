@@ -10,7 +10,8 @@ from flask import Flask, request, jsonify
 
 
 # =============== Constants & Paths ===============
-BASE_DIR = r"C:\SteamValidator"
+# Use current directory for Railway (Linux) compatibility
+BASE_DIR = os.getcwd()
 DB_PATH = os.path.join(BASE_DIR, "steamvalidator.db")
 TOKENS_PATH = os.path.join(BASE_DIR, "server_tokens.json")
 SERVER_LOG_PATH = os.path.join(BASE_DIR, "server_logs.txt")
@@ -28,9 +29,17 @@ def utcnow_iso() -> str:
 
 
 def db_connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        # Try to create directory if it doesn't exist
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -572,14 +581,51 @@ def admin_get_logs():
     return jsonify({"logs": rows}), 200
 
 
+@app.route("/api/admin/export_data", methods=["GET"])
+def admin_export_data():
+    auth_err = require_admin()
+    endpoint = "/api/admin/export_data"
+    ip = get_client_ip()
+    if auth_err:
+        insert_log(conn, endpoint, ip, auth_err[1], json.dumps(auth_err[0]))
+        return jsonify(auth_err[0]), auth_err[1]
+
+    cur = conn.cursor()
+    
+    # Export all tables
+    data = {}
+    
+    # Users
+    cur.execute("SELECT * FROM users")
+    data["users"] = [dict(r) for r in cur.fetchall()]
+    
+    # Keys
+    cur.execute("SELECT * FROM keys")
+    data["keys"] = [dict(r) for r in cur.fetchall()]
+    
+    # HWID Bans
+    cur.execute("SELECT * FROM hwid_bans")
+    data["hwid_bans"] = [dict(r) for r in cur.fetchall()]
+    
+    # Logs (last 1000)
+    cur.execute("SELECT * FROM logs ORDER BY id DESC LIMIT 1000")
+    data["logs"] = [dict(r) for r in cur.fetchall()]
+    
+    insert_log(conn, endpoint, ip, 200, json.dumps({"exported": True, "counts": {k: len(v) for k, v in data.items()}}))
+    return jsonify(data), 200
+
+
 def main() -> None:
     # Run Flask server
     host = str(config.get("host", "0.0.0.0"))
-    port = int(config.get("port", 5000))
+    port = int(os.environ.get("PORT", config.get("port", 5000)))
     print(f"SteamValidator server starting on {host}:{port}")
+    print(f"Current directory: {os.getcwd()}")
     print(f"DB: {DB_PATH}")
     print(f"Tokens: {TOKENS_PATH}")
     print(f"Logs: {SERVER_LOG_PATH}")
+    print(f"Base dir exists: {os.path.exists(BASE_DIR)}")
+    print(f"Base dir: {BASE_DIR}")
     app.run(host=host, port=port)
 
 
