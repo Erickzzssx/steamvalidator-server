@@ -15,8 +15,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 
-BASE_DIR = os.path.join(os.path.expanduser("~"), "SteamValidator")
-RESULT_PATH = os.path.join(BASE_DIR, "ValidatorResult.txt")
+# Use current directory where the script is executed
+BASE_DIR = os.getcwd()
+RESULT_PATH = os.path.join(BASE_DIR, "Results.txt")
 SESSION_PATH = os.path.join(BASE_DIR, "session.bin")
 CLIENT_KEY_PATH = os.path.join(BASE_DIR, "client_api_key.txt")
 CLIENT_CONFIG_PATH = os.path.join(BASE_DIR, "client_config.json")
@@ -25,8 +26,8 @@ SERVER_PORT_DEFAULT = 80
 
 
 def ensure_base_dir() -> None:
-    if not os.path.isdir(BASE_DIR):
-        os.makedirs(BASE_DIR, exist_ok=True)
+    # BASE_DIR is now current directory, no need to create it
+    pass
 
 
 def utcnow_iso() -> str:
@@ -392,7 +393,7 @@ def bootstrap_client_api_key(server_ip: str, port: int) -> Tuple[bool, str]:
         api_key = str(data.get("server_api_key", ""))
         if not api_key:
             return False, ""
-        os.makedirs(BASE_DIR, exist_ok=True)
+        # Save in current directory (no need to create directory)
         with open(CLIENT_KEY_PATH, "w", encoding="utf-8") as f:
             f.write(api_key)
         return True, api_key
@@ -551,6 +552,10 @@ def main() -> None:
     if True:
         # Clear result file at startup
         clear_result_file()
+        print("=== Steam Token Validator ===")
+        print("Validador para tokens Steam JWT")
+        print(f"📁 Salvando resultados em: {RESULT_PATH}")
+        print()
         # GUI flow
         initial_user = load_session_username()
         ip_cfg, port_cfg = read_or_create_client_config()
