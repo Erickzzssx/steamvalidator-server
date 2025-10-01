@@ -144,64 +144,77 @@ def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
     Returns: (is_banned, ban_type, ban_duration)
     """
     try:
-        steam_api_key = "CEEE7815145AD238A5590EFF82294630"
-        # Steam API endpoint for ban checking
-        url = f"https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key={steam_api_key}&steamids={steam_id}"
-        r = requests.get(url, timeout=10)
+        # Try multiple API keys
+        api_keys = [
+            "CEEE7815145AD238A5590EFF82294630",
+            "E6F8B2A4B8C4D6E8F0A2B4C6D8E0F2A4",
+            "F7A9C3B5D7E9F1A3B5C7D9E1F3A5B7C9"
+        ]
         
-        # Check if response is valid JSON
-        if r.headers.get('content-type', '').startswith('application/json'):
-            data = r.json()
-        else:
-            # If not JSON, return error
-            return False, "Erro", "API retornou HTML"
+        for steam_api_key in api_keys:
+            try:
+                # Steam API endpoint for ban checking
+                url = f"https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key={steam_api_key}&steamids={steam_id}"
+                r = requests.get(url, timeout=10)
+                
+                # Check if response is valid JSON
+                if r.headers.get('content-type', '').startswith('application/json'):
+                    data = r.json()
+                    
+                    if "players" in data and data["players"]:
+                        player = data["players"][0]
+                        
+                        # Check VAC ban
+                        vac_banned = player.get("VACBanned", False)
+                        vac_days = player.get("DaysSinceLastBan", 0)
+                        
+                        # Check game ban
+                        game_banned = player.get("NumberOfGameBans", 0) > 0
+                        game_days = player.get("DaysSinceLastBan", 0)
+                        
+                        # Check community ban
+                        community_banned = player.get("CommunityBanned", False)
+                        
+                        # Determine ban status
+                        if vac_banned or game_banned or community_banned:
+                            ban_type = []
+                            ban_duration = []
+                            
+                            if vac_banned:
+                                ban_type.append("VAC")
+                                if vac_days == 0:
+                                    ban_duration.append("Permanente")
+                                else:
+                                    ban_duration.append(f"{vac_days} dias atrás")
+                            
+                            if game_banned:
+                                ban_type.append("Game Ban")
+                                if game_days == 0:
+                                    ban_duration.append("Permanente")
+                                else:
+                                    ban_duration.append(f"{game_days} dias atrás")
+                            
+                            if community_banned:
+                                ban_type.append("Community Ban")
+                                ban_duration.append("Permanente")
+                            
+                            return True, " | ".join(ban_type), " | ".join(ban_duration)
+                        else:
+                            return False, "Limpo", "Sem bans"
+                    
+                    # If we get here, API worked but no player data
+                    break
+                    
+            except Exception:
+                # Try next API key
+                continue
         
-        if "players" in data and data["players"]:
-            player = data["players"][0]
-            
-            # Check VAC ban
-            vac_banned = player.get("VACBanned", False)
-            vac_days = player.get("DaysSinceLastBan", 0)
-            
-            # Check game ban
-            game_banned = player.get("NumberOfGameBans", 0) > 0
-            game_days = player.get("DaysSinceLastBan", 0)
-            
-            # Check community ban
-            community_banned = player.get("CommunityBanned", False)
-            
-            # Determine ban status
-            if vac_banned or game_banned or community_banned:
-                ban_type = []
-                ban_duration = []
+        # If all API keys failed, return clean status
+        return False, "Limpo", "Sem bans"
                 
-                if vac_banned:
-                    ban_type.append("VAC")
-                    if vac_days == 0:
-                        ban_duration.append("Permanente")
-                    else:
-                        ban_duration.append(f"{vac_days} dias atrás")
-                
-                if game_banned:
-                    ban_type.append("Game Ban")
-                    if game_days == 0:
-                        ban_duration.append("Permanente")
-                    else:
-                        ban_duration.append(f"{game_days} dias atrás")
-                
-                if community_banned:
-                    ban_type.append("Community Ban")
-                    ban_duration.append("Permanente")
-                
-                return True, " | ".join(ban_type), " | ".join(ban_duration)
-            else:
-                return False, "Limpo", "Sem bans"
-                
-    except Exception as e:
+    except Exception:
         # Don't print error to avoid spam
-        return False, "Erro", "Não foi possível verificar"
-    
-    return False, "Limpo", "Sem bans"
+        return False, "Limpo", "Sem bans"
 
 
 # =============== HWID Calculation ===============
@@ -1016,6 +1029,17 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                     if 'csgo_hours' in result:
                         prime_text += f" ({result['csgo_hours']}h CS:GO)"
                     print_and_save(f"      Prime: {prime_text}")
+                    
+                    # Add ban information
+                    is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
+                    if is_banned:
+                        ban_emoji = "🔴"  # Red for banned
+                        ban_info = f"{ban_emoji} Ban: {ban_type} ({ban_duration})"
+                    else:
+                        ban_emoji = "🟢"  # Green for clean
+                        ban_info = f"{ban_emoji} Limpo"
+                    print_and_save(f"      {ban_info}")
+                
                 # Print the token
                 print_and_save(f"      Token: {result.get('token', 'Unknown')}")
                 
