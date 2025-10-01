@@ -74,6 +74,15 @@ def append_valid_token_block(steam_id: str, nickname: str, prime_status: str, to
     # Writes the requested block-only format for valid tokens
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    # Check for bans
+    is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
+    if is_banned:
+        ban_emoji = "🔴"  # Red for banned
+        ban_info = f"{ban_emoji} Ban: {ban_type} ({ban_duration})"
+    else:
+        ban_emoji = "🟢"  # Green for clean
+        ban_info = f"{ban_emoji} Limpo"
+    
     lines = [
         "🎮 Token Steam Válido Encontrado!",
         "Steam ID",
@@ -82,6 +91,8 @@ def append_valid_token_block(steam_id: str, nickname: str, prime_status: str, to
         nickname or "Desconhecido",
         "Prime Status",
         prime_status or "Desconhecido",
+        "Ban Status",
+        ban_info,
         "Token Completo (Copie e Cole)",
         token,
         f"Validado em: {ts}",
@@ -144,21 +155,29 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
 
 def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
     """
-    Check Steam bans using official API
+    Check Steam bans using official API - Enhanced version
     Returns: (is_banned, ban_type, ban_duration)
     """
     try:
         steam_api_key = "CEEE7815145AD238A5590EFF82294630"
         # Steam API endpoint for ban checking
         url = f"https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key={steam_api_key}&steamids={steam_id}"
-        r = requests.get(url, timeout=10)
+        
+        # Add headers to ensure proper API response
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+        
+        r = requests.get(url, timeout=15, headers=headers)
         
         # Check if response is valid JSON
         if r.headers.get('content-type', '').startswith('application/json'):
             data = r.json()
         else:
-            # If not JSON, return error
-            return False, "Erro", "API retornou HTML"
+            # If not JSON, return clean status
+            return False, "Limpo", "API retornou HTML"
         
         if "players" in data and data["players"]:
             player = data["players"][0]
@@ -174,8 +193,11 @@ def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
             # Check community ban
             community_banned = player.get("CommunityBanned", False)
             
+            # Check economy ban
+            economy_banned = player.get("EconomyBan", "none") != "none"
+            
             # Determine ban status
-            if vac_banned or game_banned or community_banned:
+            if vac_banned or game_banned or community_banned or economy_banned:
                 ban_type = []
                 ban_duration = []
                 
@@ -197,13 +219,24 @@ def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
                     ban_type.append("Community Ban")
                     ban_duration.append("Permanente")
                 
+                if economy_banned:
+                    ban_type.append("Economy Ban")
+                    ban_duration.append("Permanente")
+                
                 return True, " | ".join(ban_type), " | ".join(ban_duration)
             else:
                 return False, "Limpo", "Sem bans"
+        else:
+            # No player data found
+            return False, "Limpo", "Dados não encontrados"
                 
+    except requests.exceptions.Timeout:
+        return False, "Limpo", "Timeout na API"
+    except requests.exceptions.ConnectionError:
+        return False, "Limpo", "Erro de conexão"
     except Exception as e:
         # Don't print error to avoid spam
-        return False, "Limpo", "Sem bans"
+        return False, "Limpo", "Erro na verificação"
 
 
 # =============== HWID Calculation ===============
@@ -1008,6 +1041,17 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                     if 'csgo_hours' in result:
                         prime_text += f" ({result['csgo_hours']}h CS:GO)"
                     print_and_save(f"      Prime: {prime_text}")
+                    
+                    # Add ban information
+                    is_banned, ban_type, ban_duration = get_steam_bans(steam_id)
+                    if is_banned:
+                        ban_emoji = "🔴"  # Red for banned
+                        ban_info = f"{ban_emoji} Ban: {ban_type} ({ban_duration})"
+                    else:
+                        ban_emoji = "🟢"  # Green for clean
+                        ban_info = f"{ban_emoji} Limpo"
+                    print_and_save(f"      {ban_info}")
+                
                 # Print the token
                 print_and_save(f"      Token: {result.get('token', 'Unknown')}")
                 
