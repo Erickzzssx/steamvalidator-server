@@ -625,6 +625,78 @@ def admin_export_data():
     return jsonify(data), 200
 
 
+@app.route("/api/admin/users_with_keys", methods=["GET"])
+def admin_users_with_keys():
+    auth_err = require_admin()
+    endpoint = "/api/admin/users_with_keys"
+    ip = get_client_ip()
+    if auth_err:
+        insert_log(conn, endpoint, ip, auth_err[1], json.dumps(auth_err[0]))
+        return jsonify(auth_err[0]), auth_err[1]
+
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT u.username, k.key, k.expires_at, k.created_at
+        FROM users u
+        LEFT JOIN keys k ON u.id = k.user_id
+        ORDER BY u.username
+    """)
+    rows = cur.fetchall()
+    
+    users = []
+    for row in rows:
+        users.append({
+            "username": row["username"],
+            "key": row["key"] or "",
+            "expires_at": row["expires_at"],
+            "created_at": row["created_at"]
+        })
+    
+    insert_log(conn, endpoint, ip, 200, json.dumps({"count": len(users)}))
+    return jsonify({"users": users}), 200
+
+
+@app.route("/api/admin/delete_user", methods=["POST"])
+def admin_delete_user():
+    auth_err = require_admin()
+    endpoint = "/api/admin/delete_user"
+    ip = get_client_ip()
+    if auth_err:
+        insert_log(conn, endpoint, ip, auth_err[1], json.dumps(auth_err[0]))
+        return jsonify(auth_err[0]), auth_err[1]
+
+    data = request.get_json(force=True, silent=True) or {}
+    username = data.get("username")
+    if not username:
+        msg = {"ok": False, "error": "missing_username"}
+        insert_log(conn, endpoint, ip, 400, json.dumps(msg))
+        return jsonify(msg), 400
+
+    cur = conn.cursor()
+    
+    # Get user ID
+    cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+    user_row = cur.fetchone()
+    if not user_row:
+        msg = {"ok": False, "error": "user_not_found"}
+        insert_log(conn, endpoint, ip, 404, json.dumps(msg))
+        return jsonify(msg), 404
+    
+    user_id = user_row["id"]
+    
+    # Delete user's keys first (foreign key constraint)
+    cur.execute("DELETE FROM keys WHERE user_id = ?", (user_id,))
+    
+    # Delete user
+    cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    
+    conn.commit()
+    
+    result = {"ok": True, "username": username, "deleted_keys": cur.rowcount}
+    insert_log(conn, endpoint, ip, 200, json.dumps(result))
+    return jsonify(result), 200
+
+
 def main() -> None:
     # Run Flask server
     host = str(config.get("host", "0.0.0.0"))
