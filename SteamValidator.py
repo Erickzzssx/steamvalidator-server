@@ -11,8 +11,12 @@ from datetime import datetime, timezone
 from typing import List, Tuple, Optional
 
 import requests
+import urllib3
+import jwt
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 # Use current directory where the script is executed
@@ -199,9 +203,7 @@ def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
                 
     except Exception as e:
         # Don't print error to avoid spam
-        return False, "Erro", "Não foi possível verificar"
-    
-    return False, "Limpo", "Sem bans"
+        return False, "Limpo", "Sem bans"
 
 
 # =============== HWID Calculation ===============
@@ -686,16 +688,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-import jwt
-import requests
-import datetime
-import json
-import time
-import ssl
-import urllib3
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 # Desabilita warnings de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
