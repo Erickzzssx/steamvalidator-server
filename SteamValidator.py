@@ -115,7 +115,7 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
     try:
         # Use the existing helper functions defined later in the file
         # Read API key from the bottom config if present; fallback to None
-        steam_api_key = "CEEE7815145AD238A5590EFF82294630"
+        steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
         info = get_player_info(steam_id, steam_api_key)
         nickname = info.get('nickname', 'Desconhecido')
         prime_info = check_prime_status(steam_id, steam_api_key)
