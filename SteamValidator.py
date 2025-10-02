@@ -456,82 +456,86 @@ def sha256_short(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
-def validate_tokens_once(server_ip: str, port: int, tokens_path: str) -> None:
+def validate_tokens_once(server_ip: str, port: int, tokens_path: str, username: str, license_key: str, api_key: str) -> None:
     ensure_base_dir()
-    ok, api_key = read_client_api_key()
-    if not ok or not api_key:
-        print("Erro: client_api_key ausente em C:\\SteamValidator\\client_api_key.txt.")
-        return
-
+    
     hwid = compute_local_hwid()
-    username = load_session_username()
-    # Always require explicit login before checking (no silent run)
-    try:
-        dlg = LoginDialog("SteamValidator Login")
-        if username:
-            dlg.ent_user.insert(0, username)
-        username, license_key = dlg.show()
-    except Exception:
-        username, license_key = "", ""
-    # Double-check login state: do not proceed if dialog was closed or empty
-    if not username:
-        print("Erro: username vazio.")
-        return
-    if not license_key:
-        print("Erro: license key vazia.")
-        return
     tokens_list = read_tokens_file(tokens_path)
     if not tokens_list:
         print(f"Erro: arquivo de tokens vazio ou não encontrado: {tokens_path}")
         save_session(server_ip, port, username)
         return
 
-    for token in tokens_list:
-        ok_req, status, body, err = post_validate(server_ip, port, api_key, license_key, hwid, username, token)
-        if not ok_req:
-            print(f"Erro ao validar token: {err}")
-            continue
+    print(f"\n➡️ Iniciando validação de {len(tokens_list)} tokens...\n")
+    
+    valid_count = 0
+    invalid_count = 0
+    error_count = 0
+    
+    for idx, token in enumerate(tokens_list, 1):
         try:
-            j = json.dumps(body, separators=(",", ":"))
-        except Exception:
-            j = str(body)
-        status_txt = "OK" if body.get("valid") else ("FAIL" if status < 500 else "ERROR")
-        reason = body.get("reason", f"http_{status}")
-        if status_txt == "OK":
-            steam_id = decode_jwt_sub(token) or "Desconhecido"
-            # Get Steam user info (nickname and prime status) - this takes time
-            nickname, prime_status = get_steam_user_info(steam_id)
-            # Print token inline with the validation result
-            print_and_save(f"      Token: {token}")
-            # Save detailed token block with ban info
-            append_valid_token_block(steam_id, nickname, prime_status, token)
+            print(f"[{idx}/{len(tokens_list)}] Validando token...")
+            
+            ok_req, status, body, err = post_validate(server_ip, port, api_key, license_key, hwid, username, token)
+            if not ok_req:
+                print(f"  ❌ Erro de conexão: {err}")
+                error_count += 1
+                continue
+            
+            try:
+                j = json.dumps(body, separators=(",", ":"))
+            except Exception:
+                j = str(body)
+            
+            status_txt = "OK" if body.get("valid") else ("FAIL" if status < 500 else "ERROR")
+            reason = body.get("reason", f"http_{status}")
+            
+            if status_txt == "OK":
+                steam_id = decode_jwt_sub(token) or "Desconhecido"
+                print(f"  ✅ Token válido! Steam ID: {steam_id}")
+                
+                # Get Steam user info (nickname and prime status) - this takes time
+                try:
+                    nickname, prime_status = get_steam_user_info(steam_id)
+                    print(f"      Nickname: {nickname}")
+                    print(f"      Prime: {prime_status}")
+                except Exception as e:
+                    print(f"      Aviso: Não foi possível obter informações da Steam: {e}")
+                    nickname = "Desconhecido"
+                    prime_status = "Desconhecido"
+                
+                # Print token inline with the validation result
+                print_and_save(f"      Token: {token}")
+                # Save detailed token block with ban info
+                append_valid_token_block(steam_id, nickname, prime_status, token)
+                valid_count += 1
+            else:
+                print(f"  ❌ Token inválido: {reason}")
+                invalid_count += 1
+                
+        except Exception as e:
+            print(f"  ❌ Erro ao processar token: {e}")
+            error_count += 1
+            import traceback
+            traceback.print_exc()
+    
+    print(f"\n{'='*50}")
+    print(f"Validação concluída!")
+    print(f"  ✅ Válidos: {valid_count}")
+    print(f"  ❌ Inválidos: {invalid_count}")
+    print(f"  ⚠️ Erros: {error_count}")
+    print(f"{'='*50}\n")
+    
     save_session(server_ip, port, username)
 
 
-def monitor_tokens(server_ip: str, port: int, tokens_path: str, interval_sec: int = 10) -> None:
+def monitor_tokens(server_ip: str, port: int, tokens_path: str, interval_sec: int, username: str, license_key: str, api_key: str) -> None:
     known_hashes = set()
     ensure_base_dir()
-    ok, api_key = read_client_api_key()
-    if not ok or not api_key:
-        write_result_line(f"{utcnow_iso()} | ERROR | missing_client_api_key | {{}}")
-        return
     hwid = compute_local_hwid()
-    username = load_session_username()
-    # Require explicit login for monitor mode too
-    try:
-        dlg = LoginDialog("SteamValidator Login")
-        if username:
-            dlg.ent_user.insert(0, username)
-        username, license_key = dlg.show()
-    except Exception:
-        username, license_key = "", ""
-    # Double-check login state: do not proceed if dialog was closed or empty
-    if not username:
-        write_result_line(f"{utcnow_iso()} | ERROR | missing_username | {{}}")
-        return
-    if not license_key:
-        write_result_line(f"{utcnow_iso()} | ERROR | missing_license_key | {{}}")
-        return
+    
+    print(f"\n🔍 Modo monitor ativado. Verificando novos tokens a cada {interval_sec} segundos...\n")
+    
     while True:
         tokens_list = read_tokens_file(tokens_path)
         new_tokens = []
@@ -540,26 +544,55 @@ def monitor_tokens(server_ip: str, port: int, tokens_path: str, interval_sec: in
             if h not in known_hashes:
                 known_hashes.add(h)
                 new_tokens.append((t, h))
-        for token, token_hash in new_tokens:
-            ok_req, status, body, err = post_validate(server_ip, port, api_key, license_key, hwid, username, token)
-            if not ok_req:
-                print(f"Erro ao validar token: {err}")
-                continue
+        
+        if new_tokens:
+            print(f"\n➡️ Encontrados {len(new_tokens)} novos tokens para validar...\n")
+        
+        for idx, (token, token_hash) in enumerate(new_tokens, 1):
             try:
-                j = json.dumps(body, separators=(",", ":"))
-            except Exception:
-                j = str(body)
-            status_txt = "OK" if body.get("valid") else ("FAIL" if status < 500 else "ERROR")
-            reason = body.get("reason", f"http_{status}")
-            if status_txt == "OK":
-                steam_id = decode_jwt_sub(token) or "Desconhecido"
-                # Get Steam user info (nickname and prime status) - this takes time
-                nickname, prime_status = get_steam_user_info(steam_id)
-                # Print token inline with the validation result
-                print_and_save(f"      Token: {token}")
-                # Save detailed token block with ban info
-                append_valid_token_block(steam_id, nickname, prime_status, token)
+                print(f"[{idx}/{len(new_tokens)}] Validando novo token...")
+                
+                ok_req, status, body, err = post_validate(server_ip, port, api_key, license_key, hwid, username, token)
+                if not ok_req:
+                    print(f"  ❌ Erro de conexão: {err}")
+                    continue
+                
+                try:
+                    j = json.dumps(body, separators=(",", ":"))
+                except Exception:
+                    j = str(body)
+                
+                status_txt = "OK" if body.get("valid") else ("FAIL" if status < 500 else "ERROR")
+                reason = body.get("reason", f"http_{status}")
+                
+                if status_txt == "OK":
+                    steam_id = decode_jwt_sub(token) or "Desconhecido"
+                    print(f"  ✅ Token válido! Steam ID: {steam_id}")
+                    
+                    # Get Steam user info (nickname and prime status) - this takes time
+                    try:
+                        nickname, prime_status = get_steam_user_info(steam_id)
+                        print(f"      Nickname: {nickname}")
+                        print(f"      Prime: {prime_status}")
+                    except Exception as e:
+                        print(f"      Aviso: Não foi possível obter informações da Steam: {e}")
+                        nickname = "Desconhecido"
+                        prime_status = "Desconhecido"
+                    
+                    # Print token inline with the validation result
+                    print_and_save(f"      Token: {token}")
+                    # Save detailed token block with ban info
+                    append_valid_token_block(steam_id, nickname, prime_status, token)
+                else:
+                    print(f"  ❌ Token inválido: {reason}")
+                    
+            except Exception as e:
+                print(f"  ❌ Erro ao processar token: {e}")
+                import traceback
+                traceback.print_exc()
+            
             save_session(server_ip, port, username)
+        
         time.sleep(interval_sec)
 
 
@@ -611,9 +644,12 @@ def main() -> None:
             sys.exit(1)
         mode = cfg["mode"].lower()
         if mode == "single-run":
-            validate_tokens_once(cfg["server_ip"], cfg["server_port"], cfg["tokens_path"])
+            validate_tokens_once(cfg["server_ip"], cfg["server_port"], cfg["tokens_path"], cfg["username"], cfg["license_key"], api_key)
         elif mode == "monitor":
-            monitor_tokens(cfg["server_ip"], cfg["server_port"], cfg["tokens_path"], int(cfg["interval"]))
+            monitor_tokens(cfg["server_ip"], cfg["server_port"], cfg["tokens_path"], int(cfg["interval"]), cfg["username"], cfg["license_key"], api_key)
+        
+        print("\nPressione Enter para sair...")
+        input()
         return
     # unreachable CLI flow is removed to force GUI
 
