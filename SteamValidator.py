@@ -1073,7 +1073,7 @@ if __name__ == "__main__":
     # Configurações padrão
     input_file = "tokens.txt"
     output_file = "results.json"
-    steam_api_key = "CEEE7815145AD238A5590EF82294630F"
+    steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
     
     print(f"Configurações:")
     print(f"  Arquivo de entrada: {input_file}")
