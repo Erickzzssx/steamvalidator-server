@@ -955,7 +955,7 @@ def process_tokens(input_file, output_file, steam_api_key=None):
                     'account_id': account_id if 'account_id' in locals() else f"token_{i}",
                     'token': line[:50] + "..." if len(line) > 50 else line,
                     'status': 'Error',
-                    'details': f"Erro ao processar linha: {str(e)}",
+                    'details': f'Erro ao processar linha: {str(e)}',
                     'timestamp': datetime.now().isoformat()
                 }
                 results.append(result)
@@ -1064,24 +1064,4 @@ def send_final_summary_to_discord(results, valid_count, expired_count, error_cou
             
     except Exception as e:
         print(f"❌ Erro ao enviar resumo para Discord: {str(e)}")
-
-if __name__ == "__main__":
-    print("=== Steam Token Validator ===")
-    print("Validador para tokens Steam JWT")
-    print()
-    
-    # Configurações padrão
-    input_file = "tokens.txt"
-    output_file = "results.json"
-    steam_api_key = "CEEE7815145AD238A5590EF82294630F"
-    
-    print(f"Configurações:")
-    print(f"  Arquivo de entrada: {input_file}")
-    print(f"  Arquivo de saída: {output_file}")
-    print(f"  API Key: {'Configurada' if steam_api_key else 'Não configurada'}")
-    print()
-    
-    print("Iniciando checagem de tokens...")
-    process_tokens(input_file, output_file, steam_api_key)
-    print("Checagem concluída!")
 
