@@ -110,40 +110,6 @@ def decode_jwt_sub(steam_token: str) -> Optional[str]:
         return None
 
 
-def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
-    """Bridge to existing Steam API logic below: returns (nickname, prime_status_with_bans)."""
-    try:
-        # Use the existing helper functions defined later in the file
-        # Read API key from the bottom config if present; fallback to None
-        steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
-        
-        # Get player info
-        info = get_player_info(steam_id, steam_api_key)
-        nickname = info.get('nickname', 'Desconhecido')
-        
-        # Get prime status with hours
-        prime_info = check_prime_status(steam_id, steam_api_key)
-        prime_status = prime_info.get('prime_status', 'Desconhecido')
-        
-        # Attach hours if available
-        if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
-            prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
-        
-        # Get ban information
-        try:
-            has_bans, ban_status, ban_details = get_steam_bans(steam_id)
-            if ban_details and ban_details != "Sem bans":
-                prime_status = f"{prime_status} | Bans: {ban_details}"
-            else:
-                prime_status = f"{prime_status} | Sem bans"
-        except Exception as e:
-            print(f"      Aviso: Erro ao verificar bans: {e}")
-            
-        return nickname, prime_status
-    except Exception as e:
-        print(f"      Aviso: Erro ao obter informações da Steam: {e}")
-        return "Desconhecido", "Desconhecido"
-
 
 def get_steam_bans(steam_id: str) -> Tuple[bool, str, str]:
     """
@@ -1158,4 +1124,39 @@ def send_final_summary_to_discord(results, valid_count, expired_count, error_cou
             
     except Exception as e:
         print(f"❌ Erro ao enviar resumo para Discord: {str(e)}")
+
+
+def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
+    """Bridge to existing Steam API logic below: returns (nickname, prime_status_with_bans)."""
+    try:
+        # Use the existing helper functions defined later in the file
+        # Read API key from the bottom config if present; fallback to None
+        steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
+        
+        # Get player info
+        info = get_player_info(steam_id, steam_api_key)
+        nickname = info.get('nickname', 'Desconhecido')
+        
+        # Get prime status with hours
+        prime_info = check_prime_status(steam_id, steam_api_key)
+        prime_status = prime_info.get('prime_status', 'Desconhecido')
+        
+        # Attach hours if available
+        if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
+            prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
+        
+        # Get ban information
+        try:
+            has_bans, ban_status, ban_details = get_steam_bans(steam_id)
+            if ban_details and ban_details != "Sem bans":
+                prime_status = f"{prime_status} | Bans: {ban_details}"
+            else:
+                prime_status = f"{prime_status} | Sem bans"
+        except Exception as e:
+            print(f"      Aviso: Erro ao verificar bans: {e}")
+            
+        return nickname, prime_status
+    except Exception as e:
+        print(f"      Aviso: Erro ao obter informações da Steam: {e}")
+        return "Desconhecido", "Desconhecido"
 
