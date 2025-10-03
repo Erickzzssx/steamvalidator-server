@@ -866,6 +866,8 @@ def main() -> None:
         if not isinstance(body, dict) or not body.get("ok"):
             reason = body.get("reason") if isinstance(body, dict) else str(body)
             print(f"Login falhou: {reason}")
+            print(f"Resposta completa do servidor: {body}")
+            print(f"Status HTTP: {status}")
             print("Sistema encerrado por segurança.")
             sys.exit(1)
         mode = cfg["mode"].lower()
