@@ -116,8 +116,12 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
         # Use the existing helper functions defined later in the file
         # Read API key from the bottom config if present; fallback to None
         steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
+        
+        # Get player info
         info = get_player_info(steam_id, steam_api_key)
         nickname = info.get('nickname', 'Desconhecido')
+        
+        # Get prime status with hours
         prime_info = check_prime_status(steam_id, steam_api_key)
         prime_status = prime_info.get('prime_status', 'Desconhecido')
         
@@ -125,18 +129,19 @@ def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
         if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
             prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
         
-        # Attach ban information
+        # Get ban information
         try:
             has_bans, ban_status, ban_details = get_steam_bans(steam_id)
-            if has_bans:
+            if ban_details and ban_details != "Sem bans":
                 prime_status = f"{prime_status} | Bans: {ban_details}"
             else:
-                prime_status = f"{prime_status} | {ban_details}"
-        except Exception:
-            pass
+                prime_status = f"{prime_status} | Sem bans"
+        except Exception as e:
+            print(f"      Aviso: Erro ao verificar bans: {e}")
             
         return nickname, prime_status
-    except Exception:
+    except Exception as e:
+        print(f"      Aviso: Erro ao obter informações da Steam: {e}")
         return "Desconhecido", "Desconhecido"
 
 
