@@ -13,6 +13,9 @@ from typing import List, Tuple, Optional
 import requests
 import urllib3
 import jwt
+
+# Desabilita warnings de SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from requests.adapters import HTTPAdapter
