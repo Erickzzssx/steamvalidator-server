@@ -480,6 +480,8 @@ def sha256_short(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
+
+
 def validate_tokens_once(server_ip: str, port: int, tokens_path: str, username: str, license_key: str, api_key: str) -> None:
     ensure_base_dir()
     
@@ -911,6 +913,7 @@ def check_prime_steamdb(steam_id):
             
     except Exception as e:
         return {'prime_status': f'Erro SteamDB: {str(e)}'}
+
 
 def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
     """Bridge to existing Steam API logic below: returns (nickname, prime_status_with_bans)."""
