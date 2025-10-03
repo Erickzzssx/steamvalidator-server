@@ -522,7 +522,30 @@ def validate_tokens_once(server_ip: str, port: int, tokens_path: str, username: 
                 
                 # Get Steam user info (nickname and prime status) - this takes time
                 try:
-                    nickname, prime_status = get_steam_user_info(steam_id)
+                    steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
+                    
+                    # Obtém informações do jogador
+                    player_info = get_player_info(steam_id, steam_api_key)
+                    nickname = player_info.get('nickname', 'Desconhecido')
+                    
+                    # Verifica status Prime (com métodos alternativos)
+                    prime_info = check_prime_status(steam_id, steam_api_key)
+                    prime_status = prime_info.get('prime_status', 'Desconhecido')
+                    
+                    # Attach hours if available
+                    if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
+                        prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
+                    
+                    # Verifica bans (VAC/Game/Community/Economy)
+                    if steam_api_key:
+                        bans = get_steam_bans(steam_id)
+                        if len(bans) == 3:  # has_bans, ban_status, ban_details
+                            has_bans, ban_status, ban_details = bans
+                            if ban_details and ban_details != "Sem bans":
+                                prime_status = f"{prime_status} | Bans: {ban_details}"
+                            else:
+                                prime_status = f"{prime_status} | Sem bans"
+                    
                     print(f"      Nickname: {nickname}")
                     print(f"      Prime: {prime_status}")
                 except Exception as e:
@@ -597,7 +620,30 @@ def monitor_tokens(server_ip: str, port: int, tokens_path: str, interval_sec: in
                     
                     # Get Steam user info (nickname and prime status) - this takes time
                     try:
-                        nickname, prime_status = get_steam_user_info(steam_id)
+                        steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
+                        
+                        # Obtém informações do jogador
+                        player_info = get_player_info(steam_id, steam_api_key)
+                        nickname = player_info.get('nickname', 'Desconhecido')
+                        
+                        # Verifica status Prime (com métodos alternativos)
+                        prime_info = check_prime_status(steam_id, steam_api_key)
+                        prime_status = prime_info.get('prime_status', 'Desconhecido')
+                        
+                        # Attach hours if available
+                        if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
+                            prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
+                        
+                        # Verifica bans (VAC/Game/Community/Economy)
+                        if steam_api_key:
+                            bans = get_steam_bans(steam_id)
+                            if len(bans) == 3:  # has_bans, ban_status, ban_details
+                                has_bans, ban_status, ban_details = bans
+                                if ban_details and ban_details != "Sem bans":
+                                    prime_status = f"{prime_status} | Bans: {ban_details}"
+                                else:
+                                    prime_status = f"{prime_status} | Sem bans"
+                        
                         print(f"      Nickname: {nickname}")
                         print(f"      Prime: {prime_status}")
                     except Exception as e:
@@ -914,40 +960,6 @@ def check_prime_steamdb(steam_id):
     except Exception as e:
         return {'prime_status': f'Erro SteamDB: {str(e)}'}
 
-
-def get_steam_user_info(steam_id: str) -> Tuple[str, str]:
-    """Bridge to existing Steam API logic below: returns (nickname, prime_status_with_bans)."""
-    try:
-        # Use the existing helper functions defined later in the file
-        # Read API key from the bottom config if present; fallback to None
-        steam_api_key = "812A1C32ED9A028C140DBEF127DBCE9B"
-        
-        # Get player info
-        info = get_player_info(steam_id, steam_api_key)
-        nickname = info.get('nickname', 'Desconhecido')
-        
-        # Get prime status with hours
-        prime_info = check_prime_status(steam_id, steam_api_key)
-        prime_status = prime_info.get('prime_status', 'Desconhecido')
-        
-        # Attach hours if available
-        if 'csgo_hours' in prime_info and isinstance(prime_info['csgo_hours'], (int, float)):
-            prime_status = f"{prime_status} ({prime_info['csgo_hours']}h CS:GO)"
-        
-        # Get ban information
-        try:
-            has_bans, ban_status, ban_details = get_steam_bans(steam_id)
-            if ban_details and ban_details != "Sem bans":
-                prime_status = f"{prime_status} | Bans: {ban_details}"
-            else:
-                prime_status = f"{prime_status} | Sem bans"
-        except Exception as e:
-            print(f"      Aviso: Erro ao verificar bans: {e}")
-            
-        return nickname, prime_status
-    except Exception as e:
-        print(f"      Aviso: Erro ao obter informações da Steam: {e}")
-        return "Desconhecido", "Desconhecido"
 
 
 def send_to_discord(token_data):
