@@ -480,6 +480,160 @@ def sha256_short(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
+# =============== Steam API Functions ===============
+def get_player_info(steam_id, steam_api_key=None):
+    """Obtém informações do jogador usando a API Steam"""
+    if not steam_api_key:
+        return {
+            'nickname': 'Unknown (API Key necessária)',
+            'profile_url': 'Unknown (API Key necessária)',
+            'avatar': 'Unknown (API Key necessária)',
+            'country_code': 'Unknown (API Key necessária)'
+        }
+    
+    try:
+        # Configura sessão com retry
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
+        params = {
+            'key': steam_api_key,
+            'steamids': steam_id
+        }
+        
+        response = session.get(url, params=params, headers=headers, timeout=15, verify=False)
+        
+        if response.status_code == 200:
+            data = response.json()
+            players = data.get('response', {}).get('players', [])
+            
+            if players:
+                player = players[0]
+                return {
+                    'nickname': player.get('personaname', 'Unknown'),
+                    'profile_url': player.get('profileurl', 'Unknown'),
+                    'avatar': player.get('avatar', 'Unknown'),
+                    'country_code': player.get('loccountrycode', 'Unknown'),
+                    'real_name': player.get('realname', 'Unknown'),
+                    'persona_state': player.get('personastate', 'Unknown')
+                }
+            else:
+                return {'nickname': 'Player not found', 'error': 'No player data returned'}
+        else:
+            return {'error': f'HTTP {response.status_code}: {response.text}'}
+    except Exception as e:
+        return {'error': f'Erro ao obter informações do jogador: {str(e)}'}
+
+
+def check_prime_status(steam_id, steam_api_key=None):
+    """Verifica o status Prime da conta usando múltiplos métodos"""
+    if not steam_api_key:
+        return {'prime_status': 'Unknown (API Key necessária)'}
+    
+    # Método 1: API oficial da Steam
+    try:
+        session = requests.Session()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        # Tenta o endpoint oficial primeiro
+        url = f"https://api.steampowered.com/IPlayerService/IsAccountPrimeStatus/v1/"
+        params = {
+            'key': steam_api_key,
+            'steamid': steam_id
+        }
+        
+        response = session.get(url, params=params, headers=headers, timeout=10, verify=False)
+        
+        if response.status_code == 200:
+            data = response.json()
+            prime_status = data.get('response', {}).get('prime_status', False)
+            return {'prime_status': prime_status}
+        elif response.status_code == 404:
+            # Se 404, tenta método alternativo
+            return check_prime_alternative(steam_id, steam_api_key)
+        else:
+            return {'prime_status': f'Error: HTTP {response.status_code}'}
+    except Exception as e:
+        return {'prime_status': f'Erro: {str(e)}'}
+
+
+def check_prime_alternative(steam_id, steam_api_key):
+    """Verifica Prime baseado nas horas jogadas"""
+    try:
+        # Verifica horas jogadas no CS:GO
+        hours_info = get_csgo_hours(steam_id, steam_api_key)
+        
+        if 'error' in hours_info:
+            return {'prime_status': f'Erro ao verificar horas: {hours_info["error"]}'}
+        
+        total_hours = hours_info.get('total_hours', 0)
+        
+        if total_hours >= 200:
+            return {'prime_status': 'Prime (200h+)', 'csgo_hours': total_hours}
+        elif total_hours >= 20:
+            return {'prime_status': 'Possível Prime (20-200h)', 'csgo_hours': total_hours}
+        else:
+            return {'prime_status': 'Não Prime (<20h)', 'csgo_hours': total_hours}
+            
+    except Exception as e:
+        return {'prime_status': f'Erro alternativo: {str(e)}'}
+
+
+def get_csgo_hours(steam_id, steam_api_key):
+    """Obtém horas jogadas no CS:GO"""
+    try:
+        session = requests.Session()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        # CS:GO App ID é 730
+        url = f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
+        params = {
+            'key': steam_api_key,
+            'steamid': steam_id,
+            'include_appinfo': True,
+            'include_played_free_games': True
+        }
+        
+        response = session.get(url, params=params, headers=headers, timeout=10, verify=False)
+        
+        if response.status_code == 200:
+            data = response.json()
+            games = data.get('response', {}).get('games', [])
+            
+            # Procura CS:GO (App ID: 730)
+            for game in games:
+                if game.get('appid') == 730:  # CS:GO
+                    playtime_forever = game.get('playtime_forever', 0)
+                    # Converte minutos para horas
+                    hours = playtime_forever / 60
+                    return {
+                        'total_hours': round(hours, 1),
+                        'playtime_minutes': playtime_forever,
+                        'game_name': game.get('name', 'Counter-Strike: Global Offensive')
+                    }
+            
+            return {'total_hours': 0, 'error': 'CS:GO não encontrado na biblioteca'}
+        else:
+            return {'error': f'HTTP {response.status_code}'}
+            
+    except Exception as e:
+        return {'error': f'Erro ao obter horas: {str(e)}'}
 
 
 def validate_tokens_once(server_ip: str, port: int, tokens_path: str, username: str, license_key: str, api_key: str) -> None:
@@ -785,180 +939,6 @@ def validate_token_with_steam(token):
     except Exception as e:
         return {'status': f'Erro: {str(e)}', 'token_valid': False}
 
-def get_player_info(steam_id, steam_api_key=None):
-    """Obtém informações do jogador usando a API Steam"""
-    if not steam_api_key:
-        return {
-            'nickname': 'Unknown (API Key necessária)',
-            'profile_url': 'Unknown (API Key necessária)',
-            'avatar': 'Unknown (API Key necessária)',
-            'country_code': 'Unknown (API Key necessária)'
-        }
-    
-    try:
-        # Configura sessão com retry
-        session = requests.Session()
-        retry_strategy = Retry(
-            total=2,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
-        params = {
-            'key': steam_api_key,
-            'steamids': steam_id
-        }
-        
-        response = session.get(url, params=params, headers=headers, timeout=15, verify=False)
-        
-        if response.status_code == 200:
-            data = response.json()
-            players = data.get('response', {}).get('players', [])
-            
-            if players:
-                player = players[0]
-                return {
-                    'nickname': player.get('personaname', 'Unknown'),
-                    'profile_url': player.get('profileurl', 'Unknown'),
-                    'avatar': player.get('avatar', 'Unknown'),
-                    'country_code': player.get('loccountrycode', 'Unknown'),
-                    'real_name': player.get('realname', 'Unknown'),
-                    'persona_state': player.get('personastate', 'Unknown')
-                }
-            else:
-                return {'nickname': 'Player not found', 'error': 'No player data returned'}
-        else:
-            return {'error': f'HTTP {response.status_code}: {response.text}'}
-    except Exception as e:
-        return {'error': f'Erro ao obter informações do jogador: {str(e)}'}
-
-def check_prime_status(steam_id, steam_api_key=None):
-    """Verifica o status Prime da conta usando múltiplos métodos"""
-    if not steam_api_key:
-        return {'prime_status': 'Unknown (API Key necessária)'}
-    
-    # Método 1: API oficial da Steam
-    try:
-        session = requests.Session()
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        # Tenta o endpoint oficial primeiro
-        url = f"https://api.steampowered.com/IPlayerService/IsAccountPrimeStatus/v1/"
-        params = {
-            'key': steam_api_key,
-            'steamid': steam_id
-        }
-        
-        response = session.get(url, params=params, headers=headers, timeout=10, verify=False)
-        
-        if response.status_code == 200:
-            data = response.json()
-            prime_status = data.get('response', {}).get('prime_status', False)
-            return {'prime_status': prime_status}
-        elif response.status_code == 404:
-            # Se 404, tenta método alternativo
-            return check_prime_alternative(steam_id, steam_api_key)
-        else:
-            return {'prime_status': f'Error: HTTP {response.status_code}'}
-    except Exception as e:
-        return {'prime_status': f'Erro: {str(e)}'}
-
-def check_prime_alternative(steam_id, steam_api_key):
-    """Verifica Prime baseado nas horas jogadas"""
-    try:
-        # Verifica horas jogadas no CS:GO
-        hours_info = get_csgo_hours(steam_id, steam_api_key)
-        
-        if 'error' in hours_info:
-            return {'prime_status': f'Erro ao verificar horas: {hours_info["error"]}'}
-        
-        total_hours = hours_info.get('total_hours', 0)
-        
-        if total_hours >= 200:
-            return {'prime_status': 'Prime (200h+)', 'csgo_hours': total_hours}
-        elif total_hours >= 20:
-            return {'prime_status': 'Possível Prime (20-200h)', 'csgo_hours': total_hours}
-        else:
-            return {'prime_status': 'Não Prime (<20h)', 'csgo_hours': total_hours}
-            
-    except Exception as e:
-        return {'prime_status': f'Erro alternativo: {str(e)}'}
-
-def get_csgo_hours(steam_id, steam_api_key):
-    """Obtém horas jogadas no CS:GO"""
-    try:
-        session = requests.Session()
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        # CS:GO App ID é 730
-        url = f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
-        params = {
-            'key': steam_api_key,
-            'steamid': steam_id,
-            'include_appinfo': True,
-            'include_played_free_games': True
-        }
-        
-        response = session.get(url, params=params, headers=headers, timeout=10, verify=False)
-        
-        if response.status_code == 200:
-            data = response.json()
-            games = data.get('response', {}).get('games', [])
-            
-            # Procura CS:GO (App ID: 730)
-            for game in games:
-                if game.get('appid') == 730:  # CS:GO
-                    playtime_forever = game.get('playtime_forever', 0)
-                    # Converte minutos para horas
-                    hours = playtime_forever / 60
-                    return {
-                        'total_hours': round(hours, 1),
-                        'playtime_minutes': playtime_forever,
-                        'game_name': game.get('name', 'Counter-Strike: Global Offensive')
-                    }
-            
-            return {'total_hours': 0, 'error': 'CS:GO não encontrado na biblioteca'}
-        else:
-            return {'error': f'HTTP {response.status_code}'}
-            
-    except Exception as e:
-        return {'error': f'Erro ao obter horas: {str(e)}'}
-
-def check_prime_steamdb(steam_id):
-    """Verifica Prime usando SteamDB (método não oficial)"""
-    try:
-        session = requests.Session()
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        # SteamDB pode ter informações sobre Prime
-        url = f"https://steamdb.info/player/{steam_id}/"
-        response = session.get(url, headers=headers, timeout=10, verify=False)
-        
-        if response.status_code == 200:
-            content = response.text.lower()
-            if 'prime' in content:
-                return {'prime_status': 'Detectado via SteamDB'}
-            else:
-                return {'prime_status': 'Não detectado via SteamDB'}
-        else:
-            return {'prime_status': 'SteamDB inacessível'}
-            
-    except Exception as e:
-        return {'prime_status': f'Erro SteamDB: {str(e)}'}
 
 
 
